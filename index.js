@@ -21,3 +21,5 @@ app.get('/', function (req, res) {
 app.listen(process.env.PORT, function () {
     console.log('CORS-enabled web server listening on port 3000')
 })
+
+export default app;
