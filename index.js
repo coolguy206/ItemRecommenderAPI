@@ -9,7 +9,7 @@ app.use(cors({ origin: '*' }))
 
 //? get all items
 app.get('/test', (req, res) => {
-    res.json({ msg: 'This is a test endpoint!' });
+    res.json({ msg: 'This is a test endpoint! yeah' });
 });
 
 app.use('/items', items)
