@@ -3,12 +3,9 @@ const cors = require('cors')
 const app = express()
 const items = require('./routes/items.js');
 const orders = require('./routes/orders.js');
-const { getRequestOptions } = require('./utils/getRequestOptions.js');
 require('dotenv').config()
 
-const resquestOptions = getRequestOptions();
-
-app.use(cors())
+app.use(cors({ origin: '*' }))
 
 app.use('/items', items)
 
@@ -22,4 +19,5 @@ app.listen(process.env.PORT, function () {
     console.log('CORS-enabled web server listening on port 3000')
 })
 
-export default app;
+// Export the Express app
+// export default app;
