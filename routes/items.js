@@ -170,10 +170,7 @@ router.get('/', (req, res) => {
 });
 
 
-//? get all items
-router.get('/test', (req, res) => {
-    res.json({ msg: 'This is a test endpoint!' });
-});
+
 
 //? recommend items based on sku
 router.get('/recommendations/:sku/:model', (req, res) => {

@@ -7,6 +7,11 @@ require('dotenv').config()
 
 app.use(cors({ origin: '*' }))
 
+//? get all items
+app.get('/test', (req, res) => {
+    res.json({ msg: 'This is a test endpoint!' });
+});
+
 app.use('/items', items)
 
 app.use('/orders', orders)
