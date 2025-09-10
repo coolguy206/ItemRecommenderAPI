@@ -161,24 +161,36 @@ router.param('model', async (req, res, next, model) => {
 
 
 //? get all items
-router.get('/', (req, res) => {
-    if (cachedItems) {
-        res.json(cachedItems);
-    } else {
-        res.status(503).json({ error: 'Items data not loaded yet' });
+router.get('/', async (req, res) => {
+    try {
+        const allItems = await getItems();
+        // console.log(allItems.length);
+        // req.items = allItems;
+        res.json(allItems);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch orders' });
     }
+
+    // if (cachedItems) {
+    //     res.json(cachedItems);
+    // } else {
+    //     res.status(503).json({ error: 'Items data not loaded yet' });
+    // }
 });
 
 
 
 
 //? recommend items based on sku
-router.get('/recommendations/:sku/:model', (req, res) => {
-    if (cachedItems) {
-        res.json({ bySku: req.sku, byModel: req.model });
-    } else {
-        res.status(503).json({ error: 'Items data not loaded yet' });
-    }
+router.get('/recommendations/:sku/:model', async(req, res) => {
+
+    res.json({ bySku: req.sku, byModel: req.model });
+    
+    // if (cachedItems) {
+    //     res.json({ bySku: req.sku, byModel: req.model });
+    // } else {
+    //     res.status(503).json({ error: 'Items data not loaded yet' });
+    // }
 });
 
 
@@ -207,17 +219,31 @@ router.get('/recommendations/:sku/:model', (req, res) => {
 
 
 //? get 1 item
-router.get('/:id', (req, res) => {
-    if (cachedItems) {
-        const item = cachedItems.find(i => i.id === req.params.id);
+router.get('/:pdp', async (req, res) => {
+    try {
+        const allItems = await getItems();
+        // console.log(allItems.length);
+        const item = allItems.find(i => i.baseSku === req.params.pdp);
         if (item) {
             res.json(item);
         } else {
             res.status(404).json({ error: 'Item not found' });
         }
-    } else {
-        res.status(503).json({ error: 'Items data not loaded yet' });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch orders' });
     }
+
+
+    // if (cachedItems) {
+    //     const item = cachedItems.find(i => i.id === req.params.id);
+    //     if (item) {
+    //         res.json(item);
+    //     } else {
+    //         res.status(404).json({ error: 'Item not found' });
+    //     }
+    // } else {
+    //     res.status(503).json({ error: 'Items data not loaded yet' });
+    // }
 });
 
 
