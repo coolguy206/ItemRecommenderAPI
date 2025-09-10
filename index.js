@@ -5,7 +5,11 @@ const items = require('./routes/items.js');
 const orders = require('./routes/orders.js');
 require('dotenv').config()
 
-app.use(cors({ origin: '*' }))
+let corsOptions = {
+   origin : ['https://www.teacollection.com/', 'https://sandbox.teacollection.com/'],
+}
+
+app.use(cors(corsOptions))
 
 //? get all items
 app.get('/test', (req, res) => {
