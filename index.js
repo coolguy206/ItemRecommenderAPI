@@ -6,7 +6,7 @@ const orders = require('./routes/orders.js');
 require('dotenv').config()
 
 let corsOptions = {
-   origin : ['https://www.teacollection.com/', 'https://sandbox.teacollection.com/'],
+   origin : ['https://www.teacollection.com', 'https://sandbox.teacollection.com'],
 }
 
 app.use(cors(corsOptions))
