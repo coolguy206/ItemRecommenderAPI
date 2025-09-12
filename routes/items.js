@@ -7,75 +7,67 @@ const { getItems } = require('../utils/getItems');
 const { getUserOrders } = require('../utils/getUserOrders.js');
 const { getOrderLines } = require('../utils/getOrderLines.js');
 const getAdjustedTimestamp = require('../utils/getAdjustedTimestamp');
+const { removeDuplicates } = require('../utils/removeDuplicateItems.js');
 const { GoogleGenAI } = require('@google/genai');
 const GEMINI_API_KEY = process.env.GOOGLE_AI_APIKEY;
 const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
-let cachedItems = null;
-
-//? Fetch items once at startup
-const initializeCache = async () => {
-    try {
-        cachedItems = await getItems();
-        // console.log('Items data cached successfully.');
-    } catch (error) {
-        // console.error('Error initializing items cache:', error);
-    }
-};
-
-initializeCache();
 
 router.param('sku', async (req, res, next, sku) => {
+    // console.log(`sku activated`);
     // console.log(sku);
 
     //? get the start of the month date
     const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 
-    const today = getAdjustedTimestamp(startOfMonth);
+    const date = getAdjustedTimestamp(startOfMonth);
 
     //? get the orders 
-    const usersOrders = await getUserOrders('', today);
+    const usersOrders = await getUserOrders(null, date, null);
 
-    //? convert orders into an array
-    const ordersArray = Object.values(usersOrders.orders).filter(order => typeof order === 'object');
+    //? keep fetching until we have at least 100 unique items
+    let conditionMet = false;
+    while (!conditionMet) {
+
+        let moreOrders = await getUserOrders(null, null, usersOrders.nextPage);
+
+        usersOrders.orders.push(...moreOrders.orders);
+
+        //? stop if we reach 100 unique items or more
+        if (usersOrders.orders.length >= 500 || usersOrders.count < usersOrders.orders.length) {
+            conditionMet = true;
+        }
+    }
 
     //? Fetch order lines for all orders concurrently
-    const ordersWithLines = await Promise.all(ordersArray.map(async (order) => {
+    const ordersWithLines = await Promise.all(usersOrders.orders.map(async (order) => {
 
-        const orderLinesResponse = await getOrderLines(order.id);
+        const orderLinesResponse = await getOrderLines(order.id, null);
 
-        let orderLinesArray = Object.values(orderLinesResponse.order_lines).filter(item => typeof item === 'object');
-
-        return { ...order, items: orderLinesArray };
+        return { ...order, items: orderLinesResponse };
     }));
 
-    //? loop ordersWithLines and filter out the orders that do not have the sku
+    //? filter out the orders that do not have the sku
     const filteredOrders = ordersWithLines.filter(order =>
         order.items.some(item => item.sku.indexOf(sku) !== -1)
     );
 
-    //? create an array to hold the items
-    let theArray = [];
-
-    //? if filteredOrders is not empty then push to array
-    if (filteredOrders.length > 0) {
-        filteredOrders.forEach(order => {
-            order.items.forEach(item => {
-                theArray.push(item);
-            });
-        });
-    }
+    //? make an array of only the items and exclude the matching sku
+    const filteredItems = filteredOrders.flatMap(order =>
+        order.items.filter(item => item.sku.split('-')[0] !== sku)
+    );
 
     //? Fetch detailed items asynchronously for all items
-    let itemsArray = await Promise.all(theArray.map(async (item) => {
-        const details = await getItem(item.sku);
+    let itemsArray = await Promise.all(filteredItems.map(async (item) => {
+        const details = await getItem(item.sku, null, null);
         return details[0];
     }));
 
-    //? remove duplicates based on baseSku
-    const uniqueDetails = Array.from(new Map(itemsArray.map(item => [item.baseSku, item])).values());
+    //? remove duplicate full skus
+    const uniqueArray = Array.from(new Map(itemsArray.map(item => [item.sku, item])).values());
 
-    req.sku = uniqueDetails;
+    req.sku = uniqueArray;
+    // req.sku = `working`;
 
     next();
 });
@@ -88,23 +80,17 @@ router.param('model', async (req, res, next, model) => {
     const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
     // console.log(startOfMonth);
 
-    const today = getAdjustedTimestamp(startOfMonth);
+    const date = getAdjustedTimestamp(startOfMonth);
 
     //? get the orders 
-    const usersOrders = await getUserOrders('', today);
+    const usersOrders = await getUserOrders(null, date, null);
     // console.log(usersOrders);
 
-    //? convert orders into an array
-    const ordersArray = Object.values(usersOrders.orders).filter(order => typeof order === 'object');
+    const ordersWithLines = await Promise.all(usersOrders.orders.map(async (order) => {
 
-    //? Fetch order lines for all orders concurrently
-    const ordersWithLines = await Promise.all(ordersArray.map(async (order) => {
-        const orderLinesResponse = await getOrderLines(order.id);
-        let orderLinesArray = Object.values(orderLinesResponse.order_lines).filter(item => typeof item === 'object');
+        const orderLinesResponse = await getOrderLines(order.id, null);
 
-        //? filter out the orders that do not have the sku
-        // orderLinesArray = orderLinesArray.filter(line => line.sku.indexOf(sku) !== -1);
-        return { ...order, items: orderLinesArray };
+        return { ...order, items: orderLinesResponse };
     }));
 
     const modelArray = model.split(' ').map(m => m.trim().toLowerCase());
@@ -126,26 +112,17 @@ router.param('model', async (req, res, next, model) => {
     });
 
 
-    let theArray = [];
+    //? make an array of only the items and exclude the matching sku
+    const filteredItems = filteredOrders.flatMap(order => order.items);
 
-    //? if filteredOrders is not empty then push to array
-    if (filteredOrders.length > 0) {
-        filteredOrders.forEach(order => {
-            order.items.forEach(item => {
-                theArray.push(item);
-            });
-        });
-    }
-
-    let itemsArray = await Promise.all(theArray.map(async (item) => {
-        // console.log(item.sku);
-        if (item.sku !== `GIFT_MESSAGE-999-NS`) {
-            const details = await getItem(item.sku);
-            if (details !== undefined) {
-                return details[0];
-            }
-
+    //? Fetch detailed items asynchronously for all items
+    let itemsArray = await Promise.all(filteredItems.map(async (item) => {
+        const details = await getItem(item.sku, null, null);
+        // console.log(details);
+        if (details !== undefined && details !== null) {
+            return details[0];
         }
+
     }));
 
     //? filter out undefined baseSku
@@ -163,87 +140,76 @@ router.param('model', async (req, res, next, model) => {
 //? get all items
 router.get('/', async (req, res) => {
     try {
+
         const allItems = await getItems();
-        // console.log(allItems.length);
-        // req.items = allItems;
+
         res.json(allItems);
+
     } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch orders' });
+
+        res.status(500).json({ error: 'Failed to fetch all items' });
+
     }
 
-    // if (cachedItems) {
-    //     res.json(cachedItems);
-    // } else {
-    //     res.status(503).json({ error: 'Items data not loaded yet' });
-    // }
 });
-
-
 
 
 //? recommend items based on sku
-router.get('/recommendations/:sku/:model', async(req, res) => {
+router.get('/recommendations/:sku/:model', async (req, res) => {
 
-    res.json({ bySku: req.sku, byModel: req.model });
-    
-    // if (cachedItems) {
-    //     res.json({ bySku: req.sku, byModel: req.model });
-    // } else {
-    //     res.status(503).json({ error: 'Items data not loaded yet' });
-    // }
+    try {
+
+        res.json({ bySku: req.sku, byModel: req.model });
+
+    } catch (error) {
+
+        res.status(500).json({ error: 'Failed to fetch sku & model items' });
+
+    }
+
 });
-
 
 //? recommend items based on sku for dev
 // router.get('/recommendations/:sku', (req, res) => {
-//     if (cachedItems) {
-//         // res.json(cachedItems);
-//         // res.json(req.ai);
+
+//     try {
 //         res.json({ bySku: req.sku });
-//     } else {
-//         res.status(503).json({ error: 'Items data not loaded yet' });
+
+//     } catch (error) {
+//         res.status(500).json({ error: 'Failed to fetch sku items' });
 //     }
+
 // });
 
 
 //? recommend items based on model for dev
 // router.get('/recommendations/model/:model', (req, res) => {
-//     if (cachedItems) {
-//         // res.json(cachedItems);
-//         // res.json(req.ai);
+//     try {
 //         res.json({ byModel: req.model });
-//     } else {
-//         res.status(503).json({ error: 'Items data not loaded yet' });
+
+//     } catch (error) {
+//         res.status(500).json({ error: 'Failed to fetch model items' });
 //     }
+
 // });
 
 
 //? get 1 item
-router.get('/:pdp', async (req, res) => {
+router.get('/:pdp/:name', async (req, res) => {
     try {
-        const allItems = await getItems();
-        // console.log(allItems.length);
-        const item = allItems.find(i => i.baseSku === req.params.pdp);
-        if (item) {
-            res.json(item);
-        } else {
-            res.status(404).json({ error: 'Item not found' });
-        }
+
+        const item = await getItem(null, req.params.pdp, req.params.name);
+
+        const uniqueItem = await removeDuplicates(item);
+
+        res.json(uniqueItem);
+
     } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch orders' });
+
+        res.status(500).json({ error: 'Failed to fetch pdp & name items' });
+
     }
 
-
-    // if (cachedItems) {
-    //     const item = cachedItems.find(i => i.id === req.params.id);
-    //     if (item) {
-    //         res.json(item);
-    //     } else {
-    //         res.status(404).json({ error: 'Item not found' });
-    //     }
-    // } else {
-    //     res.status(503).json({ error: 'Items data not loaded yet' });
-    // }
 });
 
 

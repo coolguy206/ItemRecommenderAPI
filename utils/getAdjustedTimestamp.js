@@ -18,12 +18,12 @@ function getAdjustedTimestamp(param) {
 
       //? Subtract 3 hours from current time
       date.setHours(hours - 3, 0, 0, 0);
-      // console.log(`from getAdjustedTimestamp: ${date}`);
+      // console.log(`from getAdjustedTimestamp no param: ${date}`);
     }
   } else {
 
     date = new Date(param);
-    // console.log(`from getAdjustedTimestamp: ${date}`);
+    // console.log(`from getAdjustedTimestamp with param: ${date}`);
   }
 
   //? Return Unix timestamp using moment

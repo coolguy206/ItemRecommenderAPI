@@ -3,12 +3,20 @@
 const { getRequestOptions } = require('./getRequestOptions.js');
 require('dotenv').config();
 
-async function getItem(sku) {
+async function getItem(sku, pdp, name) {
 
     const requestOptions = getRequestOptions();
 
-    const response = await fetch(`https://www.teacollection.com/?type=rest&full=1&page=items&format=json&sku:exactly=${sku}&active=1`, requestOptions);
+    let response;
+
+    if (sku !== null) {
+        response = await fetch(`https://www.teacollection.com/?type=rest&full=1&page=items&format=json&sku:exactly=${sku}&active=1`, requestOptions);
+    } else {
+        response = await fetch(`https://www.teacollection.com/?type=rest&full=1&page=items&format=json&sku:starts=${pdp}&model:exactly=${name}&active=1`, requestOptions);
+    }
+
     const result = await response.json();
+    // console.log(`getItem result`)
     // console.log(result);
     if (result.items == undefined) {
         return;
